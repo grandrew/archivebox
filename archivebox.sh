@@ -13,6 +13,7 @@
 #
 # Requirements:
 # - modern linux distro with Dropbox (Mac may work too)
+# - 'comm' utility
 # - convert utility from ImageMagick
 #
 # Script installation:
@@ -36,6 +37,11 @@
 #
 # (C) 2012 Andrew Gryaznov
 
+RUNPID=/tmp/archivebox.pid
+if [ -f $RUNPID ]; then
+    kill -0 $(cat $RUNPID) && exit
+fi
+echo -n $$ > $RUNPID
 # CHANGE THESE, or make sure to have right symlinks (~/ArchiveBox -> /mnt/2TB_RAID/ArchiveBox)
 
 LOCAL_ARCHIVE=~/ArchiveBox
@@ -71,69 +77,83 @@ fi
 
 CHEATWORD="RQ"
 
-IFS=$'\n'
-INDEXLIST=$(ls -1 "$DPBX_INDEX_DIR/")
-FOUND=0
+IDXFILE="/tmp/idx.archivebox"
+LOCALFILE="/tmp/local.archivebox"
 
-for FILE in $(ls -1 "$LOCAL_DEST"); do
-    FOUND=0
-    for FILE2 in $INDEXLIST; do
-        if [ $FILE = $FILE2 ]; then
-            export FOUND=1
-            break
-        fi
-    done
-    if [ $FOUND -eq 0 ]; then
-        EXT=${FILE/*./}
-        ext=$(echo $EXT | tr '[A-Z]' '[a-z]')
-        if [ $ext = "jpg" ]; then
-            if command -v convert >/dev/null 2>&1; then
-                convert "$LOCAL_DEST/$FILE" -resize 500x500 -quality 20 "$DPBX_INDEX_DIR/$FILE"
-            else
-                echo -n "RQ" > "$DPBX_INDEX_DIR/$FILE";
-            fi
+IFS=$'\n'
+FOUND=0
+CNT=0
+echo "Creating index of what we have locally..."
+
+# TODO: optimize:
+# create two lists list with ls -1, 
+# one list - local files
+# other list - ArchiveBox index
+
+ls -1 "$DPBX_INDEX_DIR/" > $IDXFILE
+ls -1 "$LOCAL_DEST" > $LOCALFILE
+
+# get files that are in LOCAL but not in INDEX
+#EXTDIFF=$(diff $LOCALFILE $IDXFILE | grep "<" | sed 's/< //')
+EXTDIFF=$(comm -23 $LOCALFILE $IDXFILE)
+
+for FILE in $EXTDIFF; do
+    echo "Doing for $FILE"
+    EXT=${FILE/*./}
+    ext=$(echo $EXT | tr '[A-Z]' '[a-z]')
+    if [ $ext = "jpg" ]; then
+        if command -v convert >/dev/null 2>&1; then
+            convert "$LOCAL_DEST/$FILE" -resize 500x500 -quality 20 "$DPBX_INDEX_DIR/$FILE"
         else
             echo -n "RQ" > "$DPBX_INDEX_DIR/$FILE";
         fi
+    else
+        echo -n "RQ" > "$DPBX_INDEX_DIR/$FILE";
     fi
 done
 
+# clean 'conflicted copy' from index
+rm $DPBX_INDEX_DIR/*conflicted\ copy*
 
 
 ######################################################
 # Sync servers
 
+echo "Doing sync servers..."
+#RQLIST=$(ls -1 "$DPBX_REQUEST_DIR/")
+#LCLIST=$(ls -1 "$LOCAL_DEST")
 
-RQLIST=$(ls -1 "$DPBX_REQUEST_DIR/")
-for FILE_IDX in $INDEXLIST; do
-    FOUND=0
-    for FILE_LOCAL in $(ls -1 "$LOCAL_DEST"); do
-        if [ "$FILE_IDX" = "$FILE_LOCAL" ]; then
-            export FOUND=1
-            break
-        fi
-    done
-    if [ $FOUND -eq 0 ]; then
-        FOUND=0
-        for FILE_RQ in $RQLIST; do
-            if [ $FILE_IDX = $FILE_RQ ]; then
-                export FOUND=1
-                break
-            fi
-        done
-        if [ $FOUND -eq 0 ]; then
-            # not found, request file
-            cp "$DPBX_INDEX_DIR/$FILE_IDX" "$DPBX_REQUEST_DIR/$FILE_IDX"
-        else
-            # if found, check if the file is completed, then move
-            if [ $(stat -c%s "$DPBX_REQUEST_DIR/$FILE_IDX") -ne $(stat -c%s "$DPBX_INDEX_DIR/$FILE_IDX") ]; then
-                mv "$DPBX_REQUEST_DIR/$FILE_IDX" "$LOCAL_DEST/$FILE_IDX"
-            fi
-        fi
+RQFILE="/tmp/rq.archivebox"
+ABSFILE="/tmp/absent.archivebox"
+#LCFILE="/tmp/lc.archivebox"
+
+ls -1 "$DPBX_REQUEST_DIR/" > $RQFILE
+
+# get files that are in INDEX but not in LOCAL (are ABSENT)
+#diff $IDXFILE $LOCALFILE | grep "<" | sed 's/< //' > $CMPFILE
+comm -23 $IDXFILE $LOCALFILE > $ABSFILE
+
+# now get files that are absent AND in RQ
+EXTDIFF=$(comm -12 $ABSFILE $RQFILE)
+
+for FILE_IDX in $EXTDIFF; do
+    # if found, check if the file is completed, then move
+    if [ $(stat -c%s "$DPBX_REQUEST_DIR/$FILE_IDX") -ne $(stat -c%s "$DPBX_INDEX_DIR/$FILE_IDX") ]; then
+        mv "$DPBX_REQUEST_DIR/$FILE_IDX" "$LOCAL_DEST/$FILE_IDX"
     fi
 done
 
+# now get files that are absent but not in RQ
+#EXTDIFF=$(diff $CMPFILE $RQFILE | grep "<" | sed 's/< //')
+EXTDIFF=$(comm -23 $ABSFILE $RQFILE)
 
+for FILE_IDX in $EXTDIFF; do
+    echo "Requesting file $FILE_IDX"
+    cp "$DPBX_INDEX_DIR/$FILE_IDX" "$DPBX_REQUEST_DIR/$FILE_IDX"
+done
+
+
+echo "Done"
 
 ######################################################
 # Fulfill file requests
@@ -141,6 +161,7 @@ done
 for j in 1 2 3 4 5 6 7 8 9 10; do
 
 IFS=$'\n'
+
 for FILE in `ls -1 $DPBX_REQUEST_DIR/`; do
     # JPG way
     EXT=${FILE/*./}
@@ -167,4 +188,6 @@ done
 
 sleep 5;
 done
+
+rm $RUNPID
 
