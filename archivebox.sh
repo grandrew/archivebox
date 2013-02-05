@@ -114,6 +114,7 @@ done
 
 # clean 'conflicted copy' from index
 rm $DPBX_INDEX_DIR/*conflicted\ copy* > /dev/null 2> /dev/null
+rm $DPBX_REQUEST_DIR/*conflicted\ copy* > /dev/null 2> /dev/null
 
 
 ######################################################
