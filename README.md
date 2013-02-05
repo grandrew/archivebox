@@ -24,6 +24,8 @@ DropBox extension (shell script) to manage unlimited space file archive on your 
  - add this string to crontab (crontab -e) on all machines you want to sync:
    "* * * * * ~/archivebox.sh"
  where ~/archivebox.sh is a full path to this script
+ - wait for 1 minute, check if the script is running:
+  ps aux | grep archivebox
 
  Archive usage:
  - all moved files appear in $DPBX_INDEX_DIR with 0kb file size (2 bytes to be correct)

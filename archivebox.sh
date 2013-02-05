@@ -83,7 +83,7 @@ LOCALFILE="/tmp/local.archivebox"
 IFS=$'\n'
 FOUND=0
 CNT=0
-echo "Creating index of what we have locally..."
+#echo "Creating index of what we have locally..."
 
 # TODO: optimize:
 # create two lists list with ls -1, 
@@ -98,7 +98,7 @@ ls -1 "$LOCAL_DEST" > $LOCALFILE
 EXTDIFF=$(comm -23 $LOCALFILE $IDXFILE)
 
 for FILE in $EXTDIFF; do
-    echo "Doing for $FILE"
+    #echo "Doing for $FILE"
     EXT=${FILE/*./}
     ext=$(echo $EXT | tr '[A-Z]' '[a-z]')
     if [ $ext = "jpg" ]; then
@@ -113,13 +113,13 @@ for FILE in $EXTDIFF; do
 done
 
 # clean 'conflicted copy' from index
-rm $DPBX_INDEX_DIR/*conflicted\ copy*
+rm $DPBX_INDEX_DIR/*conflicted\ copy* > /dev/null 2> /dev/null
 
 
 ######################################################
 # Sync servers
 
-echo "Doing sync servers..."
+#echo "Doing sync servers..."
 #RQLIST=$(ls -1 "$DPBX_REQUEST_DIR/")
 #LCLIST=$(ls -1 "$LOCAL_DEST")
 
@@ -148,12 +148,12 @@ done
 EXTDIFF=$(comm -23 $ABSFILE $RQFILE)
 
 for FILE_IDX in $EXTDIFF; do
-    echo "Requesting file $FILE_IDX"
+    #echo "Requesting file $FILE_IDX"
     cp "$DPBX_INDEX_DIR/$FILE_IDX" "$DPBX_REQUEST_DIR/$FILE_IDX"
 done
 
 
-echo "Done"
+#echo "Done"
 
 ######################################################
 # Fulfill file requests
